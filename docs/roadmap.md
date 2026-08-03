@@ -1,105 +1,99 @@
-# 12 周交付路线图 / 12-Week Delivery Roadmap
+# IssueLens 路线图 / IssueLens Roadmap
 
-## 第 1–2 周：V0.1 基础 / Weeks 1–2: V0.1 Foundation
+该文档区分“v0.2 已实现的作品集 MVP”和“需要外部数据、可信身份或更强基础设施的后续能力”，避免把计划写成事实。
 
-- 只读仓库边界和快照哈希。
-  Read-only repository boundary and snapshot hashing.
-- Issue 解析、AST/文本检索和 Evidence ID。
-  Issue parsing, AST/text retrieval, and Evidence IDs.
-- 显式状态机、工具循环和 Trace。
-  Explicit state machine, tool loop, and tracing.
-- Deterministic baseline、冒烟评测和安全测试。
-  Deterministic baseline, smoke evaluation, and safety tests.
+This document separates the implemented v0.2 portfolio MVP from future work requiring external data, trusted identity, or stronger infrastructure, so plans are not presented as facts.
 
-退出标准 / Exit criteria:
+## v0.2 MVP：已完成 / v0.2 MVP: Completed
 
-- 所有本地测试通过 / All local tests pass
-- 目标仓库写入次数为 0 / Target repository write count is zero
-- 简单案例能定位预期实现文件 / Easy fixtures localize expected implementation files
-- 信息不足的 Issue 触发安全拒绝 / Underspecified Issues trigger safe abstention
+### 只读分析与 Agent Loop / Read-only Analysis and Agent Loop
 
-## 第 3–4 周：候选补丁协议 / Weeks 3–4: Patch Proposal Protocol
+- [x] 仓库路径边界、符号链接防护、文本大小限制和前后快照。
+  Repository path boundaries, symlink protection, text-size limits, and before/after snapshots.
+- [x] Issue 解析、AST 符号索引、文本检索、Evidence ID 和内容哈希。
+  Issue parsing, AST symbol indexing, text retrieval, Evidence IDs, and content hashes.
+- [x] 显式状态机、结构化只读工具协议、离线 Policy 与兼容 Chat Completions JSON 的 LLM Policy。
+  Explicit state machine, structured read-only tool protocol, offline policy, and a Chat-Completions-JSON-compatible LLM policy.
+- [x] `insufficient_evidence` 安全拒绝、报告、完整 Trace 和仓库未变验证。
+  `insufficient_evidence` safe abstention, reports, complete trace, and repository-unchanged verification.
 
-- 与模型供应商解耦的结构化 LLM Policy。
-  Provider-independent structured LLM policy.
-- Unified Diff Parser 和修改文件白名单。
-  Unified Diff parser and touched-file allowlist.
-- 补丁绑定 Base Snapshot Hash。
-  Patch binding to the base snapshot hash.
-- 审批对象绑定 Run ID、Patch Hash 和 Snapshot。
-  Approval binding to run ID, patch hash, and snapshot.
+### 补丁协议与审计 / Patch Protocol and Audit
 
-退出标准 / Exit criteria:
+- [x] Unified Diff Parser、路径策略、文件白名单及大小限制。
+  Unified Diff parser, path policy, touched-file allowlist, and size limits.
+- [x] Diff + Base Snapshot 的 Proposal Hash，以及绑定 Run/提案/快照/审批人/时间的显式审批。
+  Proposal Hash binding the Diff and base snapshot, plus explicit approval binding the run, proposal, snapshot, approver, and time.
+- [x] 一次性临时副本预检、文件级前后哈希与内容寻址审计回执。
+  Disposable-copy preflight, per-file before/after hashes, and content-addressed audit receipts.
 
-- 拒绝格式错误或路径逃逸补丁 / Reject malformed or escaping patches
-- 每个 Patch Hunk 对应证据和计划步骤 / Every patch hunk traces to evidence and a plan step
-- 仓库变化后旧审批自动失效 / Repository changes invalidate prior approval
+### Shadow Workspace / Shadow Workspace
 
-## 第 5–6 周：隔离复现 / Weeks 5–6: Isolated Reproduction
+- [x] 固定镜像、非 root、断网、只读挂载、无 Capabilities 与限资源 Docker Runner。
+  Digest-pinned, non-root, network-disabled, read-only, capability-free, resource-bounded Docker runner.
+- [x] Baseline failing test → patched reproduction → full regression → hidden test 闭环。
+  Baseline failing test → patched reproduction → full regression → hidden test loop.
+- [x] 零测试、导入错误、超时、输出限制和基础设施失败的失败关闭判定。
+  Fail-closed handling of zero tests, import errors, timeouts, output limits, and infrastructure failures.
+- [x] 双语验证报告与完整性保护的验证回执。
+  Bilingual validation reports and integrity-protected validation receipts.
 
-- 临时、非 root Docker Shadow Workspace。
-  Ephemeral non-root Docker shadow workspace.
-- 安装阶段结束后默认断网。
-  Network disabled by default after dependency setup.
-- 执行 Baseline Failing Test、候选补丁、目标测试和全量回归。
-  Run the baseline failing test, candidate patch, targeted test, and full regression suite.
-- 设置时间、CPU、内存、进程和输出限制。
-  Enforce time, CPU, memory, process, and output limits.
+### 可靠性与产品层 / Reliability and Product Layer
 
-退出标准 / Exit criteria:
+- [x] 版本化 Checkpoint、输入漂移检测与不重放已完成动作的恢复。
+  Versioned checkpoints, input-drift detection, and resume without replaying completed actions.
+- [x] 步骤、工具、证据、时间预算和有界 LLM 重试。
+  Step, tool, evidence, and time budgets plus bounded LLM retries.
+- [x] 回环地址 + 随机 Token 的本地 Web 审阅界面，以及追加式批准/拒绝记录。
+  Loopback-and-random-token local review UI with append-only approve/reject records.
+- [x] 中英双语 Draft PR Markdown 导出；默认不发布。
+  Bilingual Draft PR Markdown export with publication disabled.
 
-- 测试不在宿主机执行 / Tests never execute on the host
-- 已知 Bug 在补丁前失败、补丁后通过 / Known bug fails before and passes after the patch
-- 既有通过测试继续通过 / Existing passing tests remain passing
+### 评测与交付 / Evaluation and Delivery
 
-## 第 7–8 周：Agent 评测 / Weeks 7–8: Agent Evaluation
+- [x] 8 个合成案例：6 个定位、2 个安全拒绝，带有效分母和失败分类。
+  Eight synthetic cases: six localization and two safe-abstention, with eligible denominators and failure taxonomy.
+- [x] Python 3.11/3.12 CI、评测 Artifact 和默认 Docker Shadow Validation Job。
+  Python 3.11/3.12 CI, evaluation artifacts, and a default-Docker Shadow Validation job.
+- [x] 中英双语 README、架构、安全、评测、作品集和面试演示材料。
+  Bilingual README, architecture, security, evaluation, portfolio, and interview-demo materials.
 
-- 从两个小型 Python 仓库收集 10–15 个近期 Issue。
-  Collect 10–15 recent Issues from two small Python repositories.
-- 固定 Commit，采用时间切分任务和独立 Grader。
-  Pin commits and use time-split tasks with independent graders.
-- 建立 Trace Replay 和失败分类。
-  Build trace replay and a failure taxonomy.
-- 对比纯文本检索与 AST + 文本检索。
-  Compare text-only retrieval with AST + text retrieval.
+## v0.3：真实评测与通用环境 / v0.3: Real Evaluation and General Environments
 
-退出标准 / Exit criteria:
+- [ ] 从 3–5 个许可兼容的 Python 项目构建 30–50 个时间切分公开 Issue，固定 Base Commit。
+  Build 30–50 time-split public Issues from 3–5 license-compatible Python projects with pinned base commits.
+- [ ] 独立维护 Reproduction 与 Hidden Grader，不让 Agent 自己的测试成为唯一评分器。
+  Independently maintain reproduction and hidden graders so Agent-generated tests are not the sole evaluator.
+- [ ] 增加受审计依赖构建阶段、锁文件/哈希验证和 pytest/tox/nox 适配器。
+  Add an audited dependency-build phase, lockfile/hash verification, and pytest/tox/nox adapters.
+- [ ] 实现 Trace Replay 与按安装、复现、定位、生成、应用、测试和安全分层的失败分类。
+  Implement trace replay and a failure taxonomy spanning setup, reproduction, localization, generation, application, tests, and safety.
+- [ ] 报告 Resolved@1、Pass-to-pass、成本、Token、耗时、人工介入和失败，不只展示成功样例。
+  Report Resolved@1, pass-to-pass, cost, tokens, latency, human intervention, and failures—not successes alone.
 
-- 公布安装、复现、定位和 Resolved@1 指标 / Publish setup, reproduction, localization, and Resolved@1 metrics
-- 同时公布失败与成本 / Publish failures and cost alongside successes
-- 不使用手工挑选的标题指标 / Avoid cherry-picked headline metrics
+## v0.4：可信协作 / v0.4: Trusted Collaboration
 
-## 第 9–10 周：产品层 / Weeks 9–10: Product Layer
+- [ ] 接入可信身份、细粒度仓库授权、签名审批和密钥轮换。
+  Integrate trusted identity, fine-grained repository authorization, signed approval, and key rotation.
+- [ ] 支持证据/计划编辑与多审阅人策略，不把 UI 按钮等同于权限授予。
+  Support evidence/plan editing and multi-reviewer policy without treating UI buttons as authority grants.
+- [ ] 添加 GitHub Draft PR 发布能力，但默认关闭，并在发布前进行独立确认。
+  Add GitHub Draft PR publication, disabled by default and protected by a separate pre-publication confirmation.
+- [ ] 遵守目标仓库贡献规范、AI 披露和维护者意愿，记录接受/拒绝反馈。
+  Follow target-repository contribution rules, AI disclosure, and maintainer preferences while recording acceptance/rejection feedback.
 
-- 为 Issue、计划、证据、Diff 和审批提供最小 Web UI。
-  Build a minimal Web UI for Issues, plans, evidence, diffs, and approval.
-- 加入 Checkpoint、恢复和单次运行预算。
-  Add checkpoints, resume, and per-run budgets.
-- 支持人工编辑、拒绝和批准。
-  Support human edit, reject, and approve workflows.
-- 导出 Draft PR 文本但不自动发布。
-  Export Draft PR content without publishing it automatically.
+## v1.0 前门槛 / Gates Before v1.0
 
-退出标准 / Exit criteria:
+- [ ] 使用比普通 Docker 更强的多租户隔离，并完成独立安全评审。
+  Use stronger multi-tenant isolation than ordinary Docker and complete an independent security review.
+- [ ] 在公开、可复现、时间切分的数据集上达到预先定义的质量与安全门槛。
+  Meet predeclared quality and safety thresholds on a public, reproducible, time-split dataset.
+- [ ] 完成秘密扫描、脱敏、数据保留、审计访问和事故响应流程。
+  Complete secret scanning, redaction, data retention, audit access, and incident-response processes.
+- [ ] 证明默认关闭的外部副作用、幂等恢复和并发隔离。
+  Demonstrate default-disabled external side effects, idempotent recovery, and concurrent isolation.
 
-- 用户能理解每个修改及其证据 / Users can understand every proposed change and its evidence
-- 中断后恢复不会重复副作用 / Resumed runs do not repeat side effects
-- 外部发布默认关闭 / External publication remains disabled by default
+## 简历使用原则 / Resume-use Rule
 
-## 第 11–12 周：真实开源信号 / Weeks 11–12: Real Open-Source Signal
+只有带 `[x]` 且可由代码、测试、CI 或公开产物复现的能力可以作为当前成果。带 `[ ]` 的项目只能表述为下一步，不得使用预估数据。
 
-- 扩展到 30–50 个 Held-Out Issue。
-  Expand to 30–50 held-out Issues.
-- 选择少量维护者认可的 `good first issue`。
-  Select a small number of maintainer-approved `good first issue` tasks.
-- 遵守每个仓库的贡献与 AI 披露规则。
-  Follow each repository's contribution and AI-disclosure policy.
-- 仅提交经过人工审核的补丁，并记录维护者反馈。
-  Submit only human-reviewed patches and record maintainer feedback.
-
-退出标准 / Exit criteria:
-
-- 可复现实验报告 / Reproducible evaluation report
-- 双语公开文档、架构图和演示视频 / Bilingual public docs, architecture diagram, and demo video
-- 至少一次有实质内容的维护者互动 / At least one substantive maintainer interaction
-- 简历只使用实测指标 / Resume uses measured metrics only
+Only `[x]` capabilities reproducible through code, tests, CI, or public artifacts may be presented as current achievements. `[ ]` items are future work and must never use estimated results.

@@ -48,12 +48,24 @@ def _unique(values: list[str], limit: int = 20) -> tuple[str, ...]:
 
 
 def parse_issue(text: str) -> IssueSpec:
+    if not isinstance(text, str):
+        raise ValueError("Issue must be text")
+    try:
+        encoded_size = len(text.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise ValueError("Issue must be valid UTF-8 text") from exc
+    if encoded_size > MAX_ISSUE_BYTES:
+        raise ValueError("Issue exceeds the size limit")
+    if "\x00" in text:
+        raise ValueError("Issue contains a NUL character")
     lines = [line.rstrip() for line in text.splitlines()]
     first_content = next(
         (line for line in lines if line.strip()),
         "未命名问题 / Untitled Issue",
     )
     title = first_content.lstrip("# ").strip()
+    if len(title) > 500:
+        title = title[:497] + "..."
 
     identifiers = re.findall(r"`([A-Za-z_][A-Za-z0-9_.]*)`", text)
     file_hints = re.findall(
@@ -76,3 +88,6 @@ def parse_issue(text: str) -> IssueSpec:
         exception_hints=_unique(exception_hints, 8),
         keywords=_unique(keywords, 20),
     )
+
+
+MAX_ISSUE_BYTES = 256_000

@@ -32,3 +32,39 @@ jobs:
           path: /tmp/issuelens-eval/
           if-no-files-found: error
           retention-days: 14
+
+  shadow-validation:
+    runs-on: ubuntu-latest
+    env:
+      SHADOW_IMAGE: python:3.12.10-slim@sha256:fd95fa221297a88e1cf49c55ec1828edd7c5a428187e67b5d1805692d11588db
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Pull the pinned Python shadow image
+        run: docker pull "$SHADOW_IMAGE"
+      - name: Prove fail-before and pass-after in Docker
+        run: |
+          proposal_json="$(PYTHONPATH=src python -m issuelens patch-proposal \
+            --repo fixtures/calculator_repo \
+            --diff evals/patches/division_by_zero.diff)"
+          proposal_hash="$(python -c 'import json,sys; print(json.load(sys.stdin)["proposal_hash"])' \
+            <<< "$proposal_json")"
+          PYTHONPATH=src python -m issuelens patch-validate \
+            --repo fixtures/calculator_repo \
+            --diff evals/patches/division_by_zero.diff \
+            --run-id ci-shadow-validation \
+            --approved-by github-actions \
+            --approve-proposal-hash "$proposal_hash" \
+            --audit-dir /tmp/issuelens-shadow-audit \
+            --reproduction-tests evals/reproduction/division_by_zero \
+            --hidden-tests evals/hidden/division_by_zero \
+            --docker-image "$SHADOW_IMAGE"
+      - name: Upload shadow-validation evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: issuelens-shadow-validation
+          path: /tmp/issuelens-shadow-audit/
+          if-no-files-found: error
+          retention-days: 14

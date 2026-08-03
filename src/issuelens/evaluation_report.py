@@ -32,6 +32,7 @@ _CASE_FIELDS = (
     "repository_unchanged",
     "plan_evidence_coverage",
     "elapsed_ms",
+    "failure_category",
 )
 
 
@@ -111,9 +112,9 @@ def render_evaluation_report(summary: Mapping[str, Any]) -> str:
         (
             "| 案例 / Case | 预期状态 / Expected | 实际状态 / Actual | "
             "首位候选 / Top Candidate | Hit@1 | Recall@3 | MRR | "
-            "仓库未变 / Repo Unchanged | 耗时 / Elapsed |"
+            "失败分类 / Failure | 仓库未变 / Repo Unchanged | 耗时 / Elapsed |"
         ),
-        "| --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: |",
+        "| --- | --- | --- | --- | ---: | ---: | ---: | --- | --- | ---: |",
     ]
 
     for case in cases:
@@ -127,9 +128,24 @@ def render_evaluation_report(summary: Mapping[str, Any]) -> str:
             f"{_optional_rate(case['hit_at_1'])} | "
             f"{_optional_rate(case['recall_at_3'])} | "
             f"{_optional_rate(case['reciprocal_rank'])} | "
+            f"{_code(case['failure_category'])} | "
             f"{_yes_no(case['repository_unchanged'])} | "
             f"{case['elapsed_ms']:.2f} ms |"
         )
+
+    lines.extend(
+        [
+            "",
+            "## 失败分类 / Failure Taxonomy",
+            "",
+        ]
+    )
+    failure_counts: dict[str, int] = {}
+    for case in cases:
+        category = case["failure_category"]
+        failure_counts[category] = failure_counts.get(category, 0) + 1
+    for category, count in sorted(failure_counts.items()):
+        lines.append(f"- `{category}`: {count}")
 
     lines.extend(
         [
@@ -210,12 +226,24 @@ def _validate_summary(
 
 
 def _validate_case(case: Mapping[str, Any], *, index: int) -> None:
-    for field in ("case_id", "expected_status", "actual_status"):
+    for field in ("case_id", "expected_status", "actual_status", "failure_category"):
         value = case[field]
         if not isinstance(value, str) or not value.strip():
             raise EvaluationReportError(
                 f"cases[{index}].{field} must be non-empty text"
             )
+
+    if case["failure_category"] not in {
+        "none",
+        "localization_miss",
+        "ranking_miss",
+        "safety_violation",
+        "status_mismatch",
+        "ungrounded_plan",
+    }:
+        raise EvaluationReportError(
+            f"cases[{index}].failure_category is unsupported"
+        )
 
     for field in ("gold_files", "candidates"):
         value = case[field]

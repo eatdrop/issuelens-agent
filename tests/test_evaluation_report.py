@@ -33,6 +33,7 @@ def _summary() -> dict[str, object]:
                 "repository_unchanged": True,
                 "plan_evidence_coverage": 1.0,
                 "elapsed_ms": 2.0,
+                "failure_category": "none",
             },
             {
                 "case_id": "underspecified\ncase",
@@ -47,6 +48,7 @@ def _summary() -> dict[str, object]:
                 "repository_unchanged": True,
                 "plan_evidence_coverage": 0.0,
                 "elapsed_ms": 3.0,
+                "failure_category": "none",
             },
         ],
     }
@@ -71,6 +73,8 @@ class EvaluationReportTests(unittest.TestCase):
         )
         self.assertIn("不适用 / N/A", first)
         self.assertIn("deterministic smoke baseline", first)
+        self.assertIn("## 失败分类 / Failure Taxonomy", first)
+        self.assertIn("- `none`: 2", first)
         self.assertTrue(first.endswith("\n"))
 
     def test_escapes_untrusted_table_values(self) -> None:

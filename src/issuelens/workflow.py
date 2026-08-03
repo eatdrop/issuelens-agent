@@ -27,6 +27,10 @@ class IssueAnalysisWorkflow:
     ) -> AnalysisReport:
         started = time.perf_counter()
         run_id = run_id or _new_run_id()
+        repository = ReadOnlyRepository(repo_path)
+        artifact_root = Path(run_dir).expanduser().resolve()
+        if artifact_root == repository.root or repository.root in artifact_root.parents:
+            raise ValueError("run_dir must be outside the target repository")
         artifacts = RunArtifacts(run_dir, run_id)
         machine = StateMachine()
         sequence = 0
@@ -44,7 +48,6 @@ class IssueAnalysisWorkflow:
             )
 
         record("run_created")
-        repository = ReadOnlyRepository(repo_path)
         try:
             issue = parse_issue(issue_text)
             machine.transition(RunState.ISSUE_PARSED)

@@ -4,10 +4,11 @@ import hashlib
 import hmac
 import json
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal
+from typing import Iterator, Literal
 
 from .approval import PatchApproval
 from .approval_gate import require_patch_application_approval
@@ -158,6 +159,17 @@ class PatchPreflightResult:
         return hmac.compare_digest(self.receipt_hash, expected_hash)
 
 
+@dataclass(frozen=True, slots=True)
+class PatchedWorkspace:
+    """A temporary, approved patch preview that exists only in its context."""
+
+    root: Path
+    base_snapshot_hash: str
+    preview_snapshot_hash: str
+    changed_paths: tuple[str, ...]
+    file_changes: tuple[PatchFileChange, ...]
+
+
 _NO_NEWLINE_MARKER = r"\ No newline at end of file"
 _RECEIPT_HASH_DOMAIN = b"issuelens.patch-preflight-receipt.v1"
 _SCHEMA_VERSION = 1
@@ -193,6 +205,43 @@ def preflight_patch_application(
     approval: PatchApproval,
 ) -> PatchPreflightResult:
     """Apply an approved proposal to an isolated temporary repository copy."""
+
+    with materialize_approved_patch(
+        repository=repository,
+        run_id=run_id,
+        proposal=proposal,
+        approval=approval,
+    ) as workspace:
+        receipt_hash = _calculate_receipt_hash(
+            run_id=run_id,
+            proposal_hash=proposal.proposal_hash,
+            approval_hash=approval.approval_hash,
+            base_snapshot_hash=workspace.base_snapshot_hash,
+            preview_snapshot_hash=workspace.preview_snapshot_hash,
+            changed_paths=workspace.changed_paths,
+            file_changes=workspace.file_changes,
+        )
+        return PatchPreflightResult(
+            run_id=run_id,
+            proposal_hash=proposal.proposal_hash,
+            approval_hash=approval.approval_hash,
+            base_snapshot_hash=workspace.base_snapshot_hash,
+            preview_snapshot_hash=workspace.preview_snapshot_hash,
+            changed_paths=workspace.changed_paths,
+            file_changes=workspace.file_changes,
+            receipt_hash=receipt_hash,
+        )
+
+
+@contextmanager
+def materialize_approved_patch(
+    *,
+    repository: ReadOnlyRepository,
+    run_id: str,
+    proposal: PatchProposal,
+    approval: PatchApproval,
+) -> Iterator[PatchedWorkspace]:
+    """Yield a temporary patched copy after enforcing the approval gate."""
 
     if not isinstance(repository, ReadOnlyRepository):
         raise PatchPreflightError("repository must be a ReadOnlyRepository")
@@ -263,35 +312,23 @@ def preflight_patch_application(
                 validated.changed_paths,
             )
             preview_snapshot_hash = preview_repository.snapshot_hash()
-
-            final_snapshot_hash = repository.snapshot_hash()
-            if not hmac.compare_digest(
-                final_snapshot_hash,
-                current_snapshot_hash,
-            ):
-                raise PatchPreflightError(
-                    "repository changed during patch preflight"
+            try:
+                yield PatchedWorkspace(
+                    root=temporary_root,
+                    base_snapshot_hash=current_snapshot_hash,
+                    preview_snapshot_hash=preview_snapshot_hash,
+                    changed_paths=validated.changed_paths,
+                    file_changes=tuple(file_changes),
                 )
-
-            receipt_hash = _calculate_receipt_hash(
-                run_id=run_id,
-                proposal_hash=proposal.proposal_hash,
-                approval_hash=approval.approval_hash,
-                base_snapshot_hash=current_snapshot_hash,
-                preview_snapshot_hash=preview_snapshot_hash,
-                changed_paths=validated.changed_paths,
-                file_changes=tuple(file_changes),
-            )
-            return PatchPreflightResult(
-                run_id=run_id,
-                proposal_hash=proposal.proposal_hash,
-                approval_hash=approval.approval_hash,
-                base_snapshot_hash=current_snapshot_hash,
-                preview_snapshot_hash=preview_snapshot_hash,
-                changed_paths=validated.changed_paths,
-                file_changes=tuple(file_changes),
-                receipt_hash=receipt_hash,
-            )
+            finally:
+                final_snapshot_hash = repository.snapshot_hash()
+                if not hmac.compare_digest(
+                    final_snapshot_hash,
+                    current_snapshot_hash,
+                ):
+                    raise PatchPreflightError(
+                        "repository changed during patch preflight"
+                    )
     except PatchPreflightError:
         raise
     except (OSError, RepositoryAccessError) as exc:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import statistics
 import uuid
+from collections import Counter
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,7 @@ class CaseResult:
     repository_unchanged: bool
     plan_evidence_coverage: float
     elapsed_ms: float
+    failure_category: str
 
 
 def evaluate_manifest(
@@ -56,6 +58,25 @@ def evaluate_manifest(
             (index for index, path in enumerate(candidates, start=1) if path in gold_set),
             None,
         )
+        status_match = report.status == expected_status
+        hit_at_1 = (
+            float(bool(candidates and candidates[0] in gold_set))
+            if gold_set
+            else None
+        )
+        reciprocal_rank = (
+            round(1.0 / rank, 4) if rank else (0.0 if gold_set else None)
+        )
+        plan_coverage = float(report.metrics.get("plan_evidence_coverage", 0.0))
+        normalized_recall = round(recall_at_3, 4) if recall_at_3 is not None else None
+        failure_category = _failure_category(
+            repository_unchanged=report.repository_unchanged,
+            status_match=status_match,
+            hit_at_1=hit_at_1,
+            recall_at_3=normalized_recall,
+            actual_status=report.status,
+            plan_evidence_coverage=plan_coverage,
+        )
         results.append(
             CaseResult(
                 case_id=raw_case["id"],
@@ -63,21 +84,14 @@ def evaluate_manifest(
                 candidates=candidates,
                 expected_status=expected_status,
                 actual_status=report.status,
-                status_match=report.status == expected_status,
-                hit_at_1=(
-                    float(bool(candidates and candidates[0] in gold_set))
-                    if gold_set
-                    else None
-                ),
-                recall_at_3=round(recall_at_3, 4) if recall_at_3 is not None else None,
-                reciprocal_rank=(
-                    round(1.0 / rank, 4) if rank else (0.0 if gold_set else None)
-                ),
+                status_match=status_match,
+                hit_at_1=hit_at_1,
+                recall_at_3=normalized_recall,
+                reciprocal_rank=reciprocal_rank,
                 repository_unchanged=report.repository_unchanged,
-                plan_evidence_coverage=float(
-                    report.metrics.get("plan_evidence_coverage", 0.0)
-                ),
+                plan_evidence_coverage=plan_coverage,
                 elapsed_ms=float(report.metrics.get("elapsed_ms", 0.0)),
+                failure_category=failure_category,
             )
         )
 
@@ -105,6 +119,9 @@ def evaluate_manifest(
             if results
             else 0.0
         ),
+        "failure_counts": dict(
+            sorted(Counter(item.failure_category for item in results).items())
+        ),
         "cases": [asdict(item) for item in results],
     }
     output = Path(run_dir).expanduser().resolve() / "evaluation-summary.json"
@@ -124,3 +141,25 @@ def evaluate_manifest(
 def _mean(values: Any) -> float:
     materialized = [value for value in values if value is not None]
     return round(sum(materialized) / len(materialized), 4) if materialized else 0.0
+
+
+def _failure_category(
+    *,
+    repository_unchanged: bool,
+    status_match: bool,
+    hit_at_1: float | None,
+    recall_at_3: float | None,
+    actual_status: str,
+    plan_evidence_coverage: float,
+) -> str:
+    if not repository_unchanged:
+        return "safety_violation"
+    if not status_match:
+        return "status_mismatch"
+    if recall_at_3 == 0.0:
+        return "localization_miss"
+    if hit_at_1 == 0.0:
+        return "ranking_miss"
+    if actual_status == "ready_for_human_review" and plan_evidence_coverage < 1.0:
+        return "ungrounded_plan"
+    return "none"

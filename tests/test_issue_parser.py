@@ -16,6 +16,12 @@ class IssueParserTests(unittest.TestCase):
         self.assertIn("ValueError", issue.exception_hints)
         self.assertIn("ZeroDivisionError", issue.exception_hints)
 
+    def test_rejects_oversized_or_nul_issue(self) -> None:
+        with self.assertRaisesRegex(ValueError, "size limit"):
+            parse_issue("x" * 256_001)
+        with self.assertRaisesRegex(ValueError, "NUL"):
+            parse_issue("# title\n\x00")
+
 
 if __name__ == "__main__":
     unittest.main()

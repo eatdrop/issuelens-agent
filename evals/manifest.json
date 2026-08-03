@@ -23,6 +23,45 @@
       "issue": "cases/underspecified_export.md",
       "gold_files": [],
       "expected_status": "insufficient_evidence"
+    },
+    {
+      "id": "missing-config",
+      "repo": "../fixtures/config_repo",
+      "issue": "cases/missing_config.md",
+      "gold_files": [
+        "src/config/loader.py"
+      ]
+    },
+    {
+      "id": "boolean-timeout",
+      "repo": "../fixtures/config_repo",
+      "issue": "cases/boolean_timeout.md",
+      "gold_files": [
+        "src/config/loader.py"
+      ]
+    },
+    {
+      "id": "unicode-slug",
+      "repo": "../fixtures/text_repo",
+      "issue": "cases/unicode_slug.md",
+      "gold_files": [
+        "src/text_tools/slug.py"
+      ]
+    },
+    {
+      "id": "negative-truncate-limit",
+      "repo": "../fixtures/text_repo",
+      "issue": "cases/negative_truncate_limit.md",
+      "gold_files": [
+        "src/text_tools/slug.py"
+      ]
+    },
+    {
+      "id": "underspecified-dashboard",
+      "repo": "../fixtures/text_repo",
+      "issue": "cases/underspecified_dashboard.md",
+      "gold_files": [],
+      "expected_status": "insufficient_evidence"
     }
   ]
 }

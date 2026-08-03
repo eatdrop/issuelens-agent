@@ -48,6 +48,24 @@ class AgentLoopTests(unittest.TestCase):
                 }
             )
 
+    def test_rejects_artifact_directory_inside_target_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            repository = Path(root) / "repository"
+            repository.mkdir()
+            (repository / "app.py").write_text("value = 1\n", encoding="utf-8")
+            output = repository / "runs"
+
+            with self.assertRaisesRegex(AgentProtocolError, "outside"):
+                AgentLoopWorkflow().run(
+                    repo_path=repository,
+                    issue_text="# value\n\n`value` is wrong.",
+                    run_dir=output,
+                    policy=OfflineToolPolicy(),
+                    run_id="inside",
+                )
+
+            self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main()
