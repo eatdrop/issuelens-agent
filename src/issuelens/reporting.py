@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -8,29 +11,64 @@ from .domain import AnalysisReport, TraceEvent
 
 
 class RunArtifacts:
-    def __init__(self, run_dir: str | Path, run_id: str) -> None:
-        self.path = Path(run_dir).expanduser().resolve() / run_id
-        self.path.mkdir(parents=True, exist_ok=False)
+    def __init__(
+        self,
+        run_dir: str | Path,
+        run_id: str,
+        *,
+        resume: bool = False,
+    ) -> None:
+        if (
+            not isinstance(run_id, str)
+            or _RUN_ID_PATTERN.fullmatch(run_id) is None
+            or run_id in {".", ".."}
+        ):
+            raise ValueError("run_id must be 1-128 safe filename characters")
+        root = Path(run_dir).expanduser().resolve()
+        self.path = root / run_id
+        if resume:
+            if self.path.is_symlink() or not self.path.is_dir():
+                raise FileNotFoundError("run directory is unavailable for resume")
+        else:
+            self.path.mkdir(parents=True, exist_ok=False)
         self.trace_path = self.path / "trace.jsonl"
+        for name in ("trace.jsonl", "report.json", "report.md", "checkpoint.json"):
+            target = self.path / name
+            if target.is_symlink():
+                raise ValueError(f"run artifact cannot be a symbolic link: {name}")
 
     def append_trace(self, event: TraceEvent) -> None:
-        with self.trace_path.open("a", encoding="utf-8") as stream:
+        descriptor = -1
+        try:
+            descriptor = os.open(
+                self.trace_path,
+                os.O_WRONLY
+                | os.O_APPEND
+                | os.O_CREAT
+                | getattr(os, "O_NOFOLLOW", 0),
+                0o600,
+            )
+        except OSError as exc:
+            raise ValueError("trace artifact could not be opened safely") from exc
+        with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
             json.dump(event.to_dict(), stream, ensure_ascii=False, sort_keys=True)
             stream.write("\n")
+            stream.flush()
 
     def write_report(self, report: AnalysisReport) -> None:
-        with (self.path / "report.json").open("w", encoding="utf-8") as stream:
-            json.dump(
+        report_json = (
+            json.dumps(
                 report.to_dict(),
-                stream,
                 ensure_ascii=False,
                 indent=2,
                 sort_keys=True,
             )
-            stream.write("\n")
-        (self.path / "report.md").write_text(
-            render_markdown(report),
-            encoding="utf-8",
+            + "\n"
+        )
+        _atomic_write(self.path / "report.json", report_json.encode("utf-8"))
+        _atomic_write(
+            self.path / "report.md",
+            render_markdown(report).encode("utf-8"),
         )
 
 
@@ -104,3 +142,37 @@ def render_markdown(report: AnalysisReport) -> str:
 
 def load_report(path: str | Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+_RUN_ID_PATTERN = re.compile(r"[A-Za-z0-9._-]{1,128}")
+
+
+def _atomic_write(target: Path, content: bytes) -> None:
+    if target.is_symlink():
+        raise ValueError(f"run artifact cannot be a symbolic link: {target.name}")
+    descriptor = -1
+    temporary: Path | None = None
+    try:
+        descriptor, name = tempfile.mkstemp(
+            prefix=f".{target.name}-",
+            suffix=".tmp",
+            dir=target.parent,
+        )
+        temporary = Path(name)
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor = -1
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if target.is_symlink():
+            raise ValueError(
+                f"run artifact cannot be a symbolic link: {target.name}"
+            )
+        os.replace(temporary, target)
+        temporary = None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)

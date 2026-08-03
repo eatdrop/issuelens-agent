@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "issuelens-agent"
-version = "0.1.0"
-description = "A local-first, evidence-grounded coding agent for Python issue analysis."
+version = "0.2.0"
+description = "A local-first, evidence-grounded and verifiable coding agent for Python repositories."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

@@ -1,97 +1,111 @@
 # IssueLens 评测方案 / Evaluation
 
-## 为什么结果和轨迹都重要 / Why Outcome and Trajectory Both Matter
+## 原则 / Principles
 
-Coding Agent 可能输出看似合理的报告，却检索了错误文件；也可能通过一个没有真正验证需求的测试。因此 IssueLens 同时记录结果和过程。
+Coding Agent 可能输出合理报告却定位错误代码，也可能让一个无效测试“通过”。IssueLens 因此同时评估结果、轨迹、安全不变量和验证阶段。
 
-A Coding Agent may produce a plausible report while searching the wrong files, or pass a test that does not validate the actual requirement. IssueLens therefore records both outcome and process.
+A Coding Agent may produce a plausible report while localizing the wrong code, or make an invalid test “pass.” IssueLens therefore evaluates outcomes, trajectories, safety invariants, and validation stages together.
 
-- **结果指标 / Outcome metrics**：是否找到预期实现文件。
-  Whether the expected implementation file was found.
-- **轨迹指标 / Trajectory metrics**：证据数量、计划引用、状态迁移、耗时和写入次数。
-  Evidence count, plan citations, state transitions, elapsed time, and write count.
+当前公开数字来自确定性策略和仓库内合成夹具，只用于回归测试与协议验证，不用于宣称通用模型质量。
 
-## V0.1 指标 / V0.1 Metrics
+Current public numbers come from a deterministic policy and in-repository synthetic fixtures. They are for regression testing and protocol validation, not claims of general model quality.
+
+## 固定夹具指标 / Fixed-fixture Metrics
 
 | 指标 / Metric | 含义 / Meaning |
 |---|---|
-| Hit@1 | 首个候选文件是否为 Gold 实现文件 / Whether the top candidate is a gold implementation file |
-| Gold File Recall@3 | 前三个候选文件覆盖的 Gold 实现文件比例 / Gold implementation files found in the top three |
-| MRR | 首个 Gold 文件的排名质量 / Rank quality of the first gold file |
-| Plan Evidence Coverage | 引用代码证据的计划步骤比例 / Fraction of plan steps citing code evidence |
-| Repository Unchanged Rate | 目标仓库哈希保持不变的比例 / Rate at which target repository hashes remain unchanged |
-| Safe Abstention Rate | 信息不足时正确停止的比例 / Rate of correct abstention on underspecified tasks |
-| Median Elapsed Time | 确定性分析的中位耗时 / Median deterministic-analysis latency |
+| Hit@1 | 首个候选是否为 Gold 实现文件 / Whether the top candidate is a Gold implementation file |
+| Gold File Recall@3 | 前三个候选覆盖 Gold 文件的比例 / Fraction of Gold files found in the top three |
+| Mean Reciprocal Rank | 首个 Gold 文件排名的倒数均值 / Mean reciprocal rank of the first Gold file |
+| Status Accuracy | `ready_for_human_review` 或 `insufficient_evidence` 是否符合预期 / Whether the final status matches expectation |
+| Safe Abstention Rate | 信息不足案例是否正确停止 / Whether underspecified cases stop safely |
+| Plan Evidence Coverage | 可审查计划步骤引用受控证据的比例 / Fraction of review-ready plan steps citing controlled evidence |
+| Repository Unchanged Rate | 分析前后目标仓库快照一致的比例 / Rate of identical target snapshots before and after analysis |
+| Median Elapsed Time | 本机确定性工作流中位耗时 / Median local deterministic-workflow latency |
 
-内置三个案例只是冒烟测试，不能用于宣称模型质量。
+当前 Manifest 包含 8 个双语合成案例：6 个定位任务、2 个安全拒绝任务，覆盖除零、空日期、缺失配置、布尔值配置、Unicode slug、负截断限制及两个信息不足需求。
 
-The three built-in cases are smoke tests, not a claim of model quality.
+The current manifest contains eight bilingual synthetic cases: six localization tasks and two safe-abstention tasks covering division by zero, blank dates, missing configuration, boolean configuration, Unicode slugs, negative truncation limits, and two underspecified requests.
 
-当前固定夹具实测结果：
+## 失败分类 / Failure Taxonomy
 
-Current measured fixed-fixture results:
+每个案例得到一个互斥的主要类别：
 
-- [基线评测报告 / Baseline Evaluation Report](evaluation-baseline.md)
+Each case receives one mutually exclusive primary category:
 
-每次运行 `make eval` 都会从同一份内存 summary 自动生成以下本地产物：
+- `none`：所有当前断言满足。
+  All current assertions are satisfied.
+- `safety_violation`：目标仓库发生非预期变化。
+  The target repository changed unexpectedly.
+- `status_mismatch`：最终状态与 Manifest 预期不一致。
+  The final status differs from the manifest expectation.
+- `localization_miss`：前三个候选未覆盖 Gold 文件。
+  The top three candidates miss a Gold file.
+- `ranking_miss`：Gold 文件被找到，但首位不是 Gold。
+  A Gold file is found, but the top candidate is not Gold.
+- `ungrounded_plan`：可执行计划没有完整引用证据。
+  An actionable plan lacks complete evidence citations.
 
-Every `make eval` run automatically generates these local artifacts from the same in-memory summary:
+分类顺序体现安全优先级；一个案例若同时满足多个失败条件，只记录最先命中的主要类别，详细字段仍保留在逐案例结果中。
+
+The order reflects safety priority. If a case satisfies multiple failure conditions, only the first primary category is recorded, while detailed fields remain in the per-case result.
+
+## 运行与产物 / Execution and Artifacts
+
+```bash
+make eval
+```
 
 ```text
 runs/eval/
-├── evaluation-summary.json    # 结构化汇总 / Structured summary
-└── evaluation-summary.md      # 中英双语自动报告 / Bilingual generated report
+├── evaluation-summary.json
+├── evaluation-summary.md
+└── <case-run-id>/
+    ├── report.json
+    ├── report.md
+    ├── trace.jsonl
+    └── checkpoint.json
 ```
 
-`runs/eval` 被 Git 忽略，因此自动报告代表最新本地运行；上方链接的文档是带日期的公开评测快照。
+JSON 和双语 Markdown 汇总来自同一份内存结果，避免两个报告口径漂移。`runs/eval` 被 Git 忽略，带日期的公开快照见 [固定夹具基线 / Fixed-fixture Baseline](evaluation-baseline.md)。
 
-`runs/eval` is Git-ignored, so the generated report represents the latest local run; the linked document above is a dated public evaluation snapshot.
+The JSON and bilingual Markdown summaries are generated from the same in-memory result to prevent reporting drift. `runs/eval` is Git-ignored; see [Fixed-fixture Baseline / 固定夹具基线](evaluation-baseline.md) for the dated public snapshot.
 
-## CI 评测证据 / CI Evaluation Evidence
+## CI 证据 / CI Evidence
 
-GitHub Actions 会在 Python 3.11 和 3.12 的矩阵任务中分别运行相同的 deterministic evaluation，并上传唯一命名的 Artifact：
+Python 3.11 和 3.12 的矩阵任务运行全量单元测试和相同评测，并上传唯一命名 Artifact：
 
-GitHub Actions runs the same deterministic evaluation in the Python 3.11 and 3.12 matrix jobs and uploads uniquely named artifacts:
+The Python 3.11 and 3.12 matrix jobs run the full unit suite and identical evaluation, uploading uniquely named artifacts:
 
 ```text
 issuelens-evaluation-python-3.11
 issuelens-evaluation-python-3.12
 ```
 
-每个 Artifact 包含该矩阵任务生成的结构化汇总、双语 Markdown 汇总、逐案例报告和 `trace.jsonl`。进入对应的 GitHub Actions Run 后，可以在 Run Summary 的 Artifacts 区域下载。
+单独的 `shadow-validation` Job 使用固定 Docker 镜像运行 failing-test → patch → regression → hidden-test 演示，并上传审计回执。Artifact 保留 14 天，缺失输出会使上传失败而不是静默跳过。
 
-Each artifact contains the structured summary, bilingual Markdown summary, per-case reports, and `trace.jsonl` produced by that matrix job. Open the corresponding GitHub Actions run and download it from the Artifacts section of the run summary.
+A separate `shadow-validation` job runs the failing-test → patch → regression → hidden-test demo in the pinned Docker image and uploads the audit receipt. Artifacts are retained for 14 days; missing output fails the upload instead of being silently ignored.
 
-Artifact 保留 14 天；如果评测目录不存在或没有文件，上传步骤会失败，而不是静默跳过证据。
+CI 只处理仓库内合成数据。引入真实仓库前，必须检查报告、Trace 和测试输出是否包含受许可证约束的源码、个人信息或凭据。
 
-Artifacts are retained for 14 days. If the evaluation directory is missing or empty, the upload step fails instead of silently omitting evidence.
+CI processes only synthetic data stored in this repository. Before introducing real repositories, inspect reports, traces, and test output for license-restricted source, personal data, or credentials.
 
-当前 CI 评测只使用仓库内的合成夹具。加入真实 Issue 或外部仓库前，必须先检查 Trace 和报告是否包含源码、个人信息、凭据或其他不应上传的内容。
+## Shadow Validation 与 Resolved@1 的区别 / Shadow Validation vs. Resolved@1
 
-The current CI evaluation uses only synthetic fixtures stored in this repository. Before adding real Issues or external repositories, inspect traces and reports for source code, personal data, credentials, or other content that must not be uploaded.
+当前 Shadow Demo 证明一个预制候选补丁通过独立复现、回归与隐藏测试。它不是 Agent 自动生成补丁的 Resolved@1，因为补丁并非由 Agent 从 Issue 独立产生，案例也不是 Held-out 公开 Issue。
 
-## V1 评测目标 / V1 Evaluation Target
+The current Shadow Demo proves that a prepared candidate patch passes independent reproduction, regression, and hidden tests. It is not Agent-generated Resolved@1 because the Agent did not independently produce the patch from the Issue and the case is not a held-out public Issue.
 
-从 3–5 个 Python 仓库中构建 30–50 个时间切分 Issue，固定 Base Commit 和许可证信息，不得只挑成功案例。
+## 后续真实评测 / Future Real-world Evaluation
 
-Create 30–50 time-split Issues from 3–5 Python repositories. Pin base commits and license metadata; do not select only successful examples.
+下一阶段应从 3–5 个 Python 项目构建 30–50 个时间切分公开 Issue，固定 Base Commit、许可证和环境，保留失败案例，并使用独立 Grader。
 
-新增指标包括：
+The next phase should build 30–50 time-split public Issues from 3–5 Python projects, pinning base commits, licenses, and environments, retaining failures, and using independent graders.
 
-Additional metrics include:
+需要新增：安装成功率、Issue 复现率、补丁应用率、独立隐藏测试 Resolved@1、Pass-to-pass 非回归率、平均 Diff 大小、工具/Token/成本/耗时、超时/人工介入率和危险动作拦截率。
 
-- 环境安装成功率 / Environment setup success rate
-- Issue 复现率 / Issue reproduction rate
-- 失败测试正确率 / Failing-test correctness
-- 补丁应用成功率 / Patch application rate
-- 独立隐藏测试下的 Resolved@1 / Resolved@1 using independent hidden tests
-- Pass-to-pass 非回归率 / Pass-to-pass non-regression rate
-- 平均 Diff 大小 / Average diff size
-- 工具调用、Token、成本与耗时 / Tool calls, tokens, cost, and wall time
-- 超时率和人工介入率 / Timeout and human-intervention rate
-- 危险动作拦截率 / Unsafe-action block rate
-- 被接受和合并的公开 PR 数 / Accepted and merged public pull requests
+Add setup success, Issue reproduction, patch application, independent-hidden-test Resolved@1, pass-to-pass non-regression, average Diff size, tool/token/cost/time, timeout/human-intervention, and unsafe-action block rates.
 
-Agent 自己生成的测试不能是唯一 Grader。评测必须结合确定性测试、维护者测试和人工抽查。
+Agent 自己生成的测试不能作为唯一 Grader；必须结合维护者测试、独立隐藏测试和人工抽查。
 
-Agent-generated tests cannot be the only grader. Evaluation must combine deterministic tests, maintainer tests, and sampled human review.
+Agent-generated tests cannot be the only grader; maintainer tests, independent hidden tests, and sampled human review are required.

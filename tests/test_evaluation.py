@@ -15,7 +15,7 @@ class EvaluationTests(unittest.TestCase):
                 PROJECT_ROOT / "evals" / "manifest.json",
                 run_dir,
             )
-            self.assertEqual(summary["case_count"], 3)
+            self.assertEqual(summary["case_count"], 8)
             self.assertEqual(summary["repository_unchanged_rate"], 1.0)
             self.assertGreaterEqual(summary["gold_file_recall_at_3"], 1.0)
             self.assertEqual(summary["safe_abstention_rate"], 1.0)
@@ -31,7 +31,7 @@ class EvaluationTests(unittest.TestCase):
             )
             self.assertIn(
                 "| 仓库保持不变率 / Repository Unchanged Rate "
-                "| 1.0000 / 100.00% | 3 |",
+                "| 1.0000 / 100.00% | 8 |",
                 markdown,
             )
             self.assertIn("`evaluation-summary.json`", markdown)

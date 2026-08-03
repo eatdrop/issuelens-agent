@@ -113,6 +113,18 @@ class PatchProposalCliTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "maximum size"):
             self._run()
 
+    def test_rejects_symbolic_link_diff(self) -> None:
+        real_diff = self.root / "real.diff"
+        real_diff.write_text(DIFF, encoding="utf-8")
+        self.diff_path.unlink()
+        try:
+            self.diff_path.symlink_to(real_diff)
+        except OSError:
+            self.skipTest("symbolic links are not available")
+
+        with self.assertRaisesRegex(SystemExit, "symbolic link"):
+            self._run()
+
 
 if __name__ == "__main__":
     unittest.main()

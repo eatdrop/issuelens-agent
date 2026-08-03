@@ -2,111 +2,91 @@
 
 ## 评测结论 / Evaluation Summary
 
-2026-07-29，在 3 个内置合成案例上运行 IssueLens deterministic baseline：
+2026-08-03，在 8 个手工维护的双语合成案例上运行 IssueLens deterministic baseline：
 
-On 2026-07-29, the IssueLens deterministic baseline was evaluated on three built-in synthetic cases:
+On 2026-08-03, the IssueLens deterministic baseline was evaluated on eight manually maintained bilingual synthetic cases:
 
 | 指标 / Metric | 结果 / Result | 有效样本 / Eligible Cases |
-| --- | ---: | ---: |
-| Hit@1 | 1.0000 / 100% | 2 / 2 |
-| Gold File Recall@3 | 1.0000 / 100% | 2 / 2 |
-| Mean Reciprocal Rank | 1.0000 / 100% | 2 / 2 |
-| 状态准确率 / Status Accuracy | 1.0000 / 100% | 3 / 3 |
-| 安全拒绝率 / Safe Abstention Rate | 1.0000 / 100% | 1 / 1 |
-| 仓库保持不变率 / Repository Unchanged Rate | 1.0000 / 100% | 3 / 3 |
-| 计划证据覆盖率 / Plan Evidence Coverage | 1.0000 / 100% | 2 个可审查案例 / 2 review-ready cases |
-| 中位耗时 / Median Elapsed Time | 15.71 ms | 3 cases |
+|---|---:|---:|
+| Hit@1 | 1.0000 / 100% | 6 / 6 |
+| Gold File Recall@3 | 1.0000 / 100% | 6 / 6 |
+| Mean Reciprocal Rank | 1.0000 / 100% | 6 / 6 |
+| 状态准确率 / Status Accuracy | 1.0000 / 100% | 8 / 8 |
+| 安全拒绝率 / Safe Abstention Rate | 1.0000 / 100% | 2 / 2 |
+| 仓库保持不变率 / Repository Unchanged Rate | 1.0000 / 100% | 8 / 8 |
+| 计划证据覆盖率 / Plan Evidence Coverage | 1.0000 / 100% | 6 个可审查案例 / 6 review-ready cases |
+| 中位耗时 / Median Elapsed Time | 16.60 ms | 8 cases |
 
-这些结果证明当前 deterministic baseline 能在固定冒烟夹具上复现预期行为。它们不能证明系统在真实公开 Issue、陌生仓库或通用 Coding Agent 任务上的质量。
+这些结果证明当前确定性基线能在固定合成夹具上复现预期行为。它们不能证明陌生仓库、真实公开 Issue、真实 LLM 或通用 Coding Agent 任务上的质量。
 
-These results show that the current deterministic baseline reproduces the expected behavior on the fixed smoke-test fixtures. They do not establish quality on real public Issues, unfamiliar repositories, or general Coding Agent tasks.
+These results show that the deterministic baseline reproduces expected behavior on fixed synthetic fixtures. They do not establish quality on unfamiliar repositories, real public Issues, real LLMs, or general Coding Agent tasks.
 
 ## 评测配置 / Evaluation Configuration
 
-- 评测清单 / Manifest: `evals/manifest.json`
-- 执行命令 / Command: `make eval`
+- 日期 / Date: `2026-08-03`
+- Manifest: `evals/manifest.json`
+- 命令 / Command: `make eval`
 - 工作流 / Workflow: deterministic `IssueAnalysisWorkflow`
-- 案例数 / Case count: 3
-- 有 Gold 文件的定位案例 / Localization cases with Gold files: 2
-- 信息不足的安全拒绝案例 / Underspecified safe-abstention cases: 1
-- 操作系统与架构 / Operating system and architecture: Darwin arm64
-- Python: 3.12.10
-- 网络或外部模型调用 / Network or external model calls: 无 / None
+- 案例数 / Cases: 8
+- 定位案例 / Localization cases: 6
+- 安全拒绝案例 / Safe-abstention cases: 2
+- 环境 / Environment: Darwin arm64, Python 3.12.10
+- 网络或外部模型 / Network or external model: 无 / None
 
-评测输出写入 Git 忽略的 `runs/eval/evaluation-summary.json`，每个案例还会生成报告和 Trace。
+耗时只描述该次本地运行，会随机器和后台负载变化；它不是跨平台性能基准。
 
-Evaluation output is written to the Git-ignored `runs/eval/evaluation-summary.json`; each case also produces a report and trace.
+Timing describes only this local run and varies with hardware and background load; it is not a cross-platform performance benchmark.
 
 ## 逐案例结果 / Per-case Results
 
-| 案例 / Case | 预期状态 / Expected | 实际状态 / Actual | 首位候选 / Top Candidate | Hit@1 | Recall@3 | MRR | 仓库未变 / Repo Unchanged | 耗时 / Elapsed |
-| --- | --- | --- | --- | ---: | ---: | ---: | --- | ---: |
-| `division-by-zero` | `ready_for_human_review` | `ready_for_human_review` | `src/calculator.py` | 1.0 | 1.0 | 1.0 | 是 / Yes | 15.71 ms |
-| `blank-due-date` | `ready_for_human_review` | `ready_for_human_review` | `src/task_tracker/parser.py` | 1.0 | 1.0 | 1.0 | 是 / Yes | 18.43 ms |
-| `underspecified-export` | `insufficient_evidence` | `insufficient_evidence` | `src/calculator.py` | 不适用 / N/A | 不适用 / N/A | 不适用 / N/A | 是 / Yes | 14.49 ms |
+| 案例 / Case | 预期与实际状态 / Expected & Actual | 首位候选 / Top Candidate | Hit@1 | Recall@3 | MRR | 失败分类 / Failure | 未改仓库 / Unchanged | 耗时 / Time |
+|---|---|---|---:|---:|---:|---|---|---:|
+| `division-by-zero` | `ready_for_human_review` | `src/calculator.py` | 1.0 | 1.0 | 1.0 | `none` | 是 / Yes | 16.28 ms |
+| `blank-due-date` | `ready_for_human_review` | `src/task_tracker/parser.py` | 1.0 | 1.0 | 1.0 | `none` | 是 / Yes | 16.92 ms |
+| `underspecified-export` | `insufficient_evidence` | `src/calculator.py` | N/A | N/A | N/A | `none` | 是 / Yes | 12.57 ms |
+| `missing-config` | `ready_for_human_review` | `src/config/loader.py` | 1.0 | 1.0 | 1.0 | `none` | 是 / Yes | 17.63 ms |
+| `boolean-timeout` | `ready_for_human_review` | `src/config/loader.py` | 1.0 | 1.0 | 1.0 | `none` | 是 / Yes | 21.35 ms |
+| `unicode-slug` | `ready_for_human_review` | `src/text_tools/slug.py` | 1.0 | 1.0 | 1.0 | `none` | 是 / Yes | 19.30 ms |
+| `negative-truncate-limit` | `ready_for_human_review` | `src/text_tools/slug.py` | 1.0 | 1.0 | 1.0 | `none` | 是 / Yes | 16.01 ms |
+| `underspecified-dashboard` | `insufficient_evidence` | 无 / None | N/A | N/A | N/A | `none` | 是 / Yes | 14.88 ms |
 
-`underspecified-export` 没有 Gold 文件，因此不进入 Hit@1、Recall@3 或 MRR 的分母。它用于检查系统是否返回 `insufficient_evidence`，而不是根据弱证据编造可执行计划。
+两项安全拒绝案例没有 Gold 文件，因此不进入 Hit@1、Recall@3 或 MRR 分母。可审查案例与安全拒绝案例分别计算计划覆盖率和拒绝率。
 
-`underspecified-export` has no Gold file, so it is excluded from the denominators of Hit@1, Recall@3, and MRR. It checks whether the system returns `insufficient_evidence` instead of fabricating an actionable plan from weak evidence.
-
-## 指标解释 / Metric Interpretation
-
-- **Hit@1 = 2/2**：两个定位案例的首位候选都是唯一 Gold 实现文件。
-  In both localization cases, the top candidate was the sole Gold implementation file.
-- **Gold File Recall@3 = 2/2**：两个定位案例都在前三个候选中覆盖了唯一 Gold 文件。
-  Both localization cases covered their sole Gold file within the top three candidates.
-- **MRR = 1.0**：两个定位案例的首个 Gold 文件排名均为第一。
-  The first Gold file ranked first in both localization cases.
-- **状态准确率 = 3/3**：两个可审查案例和一个信息不足案例的状态都符合清单预期。
-  Status matched the manifest for two review-ready cases and one underspecified case.
-- **安全拒绝率 = 1/1**：唯一信息不足案例被正确拒绝。
-  The only underspecified case was correctly rejected.
-- **仓库保持不变率 = 3/3**：所有案例在分析前后都保持相同仓库快照。
-  All cases retained identical repository snapshots before and after analysis.
-- **计划证据覆盖率 = 1.0**：两个 `ready_for_human_review` 案例的计划步骤都满足当前证据引用检查。
-  Plan steps in both `ready_for_human_review` cases satisfied the current evidence-reference check.
-- **中位耗时 = 15.71 ms**：该数字只描述本次本地 deterministic 运行，不是跨机器性能基准。
-  This value describes only this local deterministic run and is not a cross-machine performance benchmark.
+The two safe-abstention cases have no Gold files and are excluded from Hit@1, Recall@3, and MRR denominators. Plan coverage and abstention rate use review-ready and underspecified cases respectively.
 
 ## 可用于简历的安全表述 / Resume-safe Statement
 
-> 在 3 个合成冒烟案例的 deterministic baseline 上，两个代码定位案例均实现 Hit@1、Gold File Recall@3 和 MRR 1.0；唯一信息不足案例被正确拒绝，3/3 次运行保持目标仓库快照不变。
+> 在 8 个手工维护的合成案例 deterministic baseline 上，6 个代码定位案例的 Hit@1、Gold File Recall@3 与 MRR 均为 1.0；2 个信息不足案例均正确拒绝，8/8 次分析保持目标仓库快照不变。
 >
-> On a three-case synthetic smoke evaluation of the deterministic baseline, both localization cases achieved Hit@1, Gold File Recall@3, and MRR of 1.0; the sole underspecified case was correctly rejected, and all 3/3 runs preserved the target-repository snapshot.
+> On an eight-case, manually maintained synthetic deterministic baseline, all six localization cases achieved Hit@1, Gold File Recall@3, and MRR of 1.0; both underspecified cases were correctly rejected, and all 8/8 analyses preserved the target-repository snapshot.
 
-使用该表述时必须保留“3 个合成冒烟案例”和 “deterministic baseline”的限定，不能简化为“真实 Issue 准确率 100%”。
+必须保留“手工维护的合成案例”和 “deterministic baseline”限定，不能改写为“真实 Issue 准确率 100%”或 “Resolved@1 100%”。
 
-Keep the qualifiers “three synthetic smoke cases” and “deterministic baseline” whenever using this statement. Do not shorten it to “100% accuracy on real Issues.”
+Keep the qualifiers “manually maintained synthetic cases” and “deterministic baseline.” Do not rewrite this as “100% real-Issue accuracy” or “100% Resolved@1.”
 
 ## 限制 / Limitations
 
-- 只有 3 个手工维护的合成案例，样本量过小。
-  There are only three manually maintained synthetic cases, which is far too small for generalization.
-- 案例与 deterministic 策略来自同一项目，不是独立 Held-out 数据。
-  The cases and deterministic policy come from the same project; this is not independent held-out data.
-- 安全拒绝率只有 1 个有效样本。
-  Safe Abstention Rate has only one eligible sample.
-- 评测不生成补丁、不执行目标测试，也不计算 Resolved@1。
-  The evaluation does not generate patches, execute target tests, or calculate Resolved@1.
-- 评测不覆盖真实 LLM 的随机性、Token、成本或 Prompt Injection 鲁棒性。
-  It does not cover real-LLM randomness, tokens, cost, or prompt-injection robustness.
-- 耗时会随硬件、操作系统和后台负载变化。
-  Timing varies with hardware, operating system, and background load.
+- 只有 8 个合成案例，样本量不足以外推。
+  Eight synthetic cases are insufficient for generalization.
+- 案例与确定性策略由同一项目维护，不是独立 Held-out 数据。
+  The cases and deterministic policy are maintained by the same project and are not independent held-out data.
+- 安全拒绝率只有 2 个有效样本。
+  Safe Abstention Rate has only two eligible samples.
+- 当前评测不生成补丁，不计算 Agent-generated Resolved@1。
+  The current evaluation does not generate patches or calculate Agent-generated Resolved@1.
+- Shadow Demo 的候选补丁为预制夹具，不能混入定位指标。
+  The Shadow Demo uses a prepared patch fixture and must not be mixed into localization metrics.
+- 不覆盖真实 LLM 的随机性、Token、成本、服务商差异或语义级 Prompt Injection。
+  It does not cover real-LLM randomness, tokens, cost, provider differences, or semantic prompt injection.
 
-## 复现方式 / Reproduction
+## 复现 / Reproduction
 
 ```bash
 make eval
+sed -n '1,280p' runs/eval/evaluation-summary.json
+sed -n '1,280p' runs/eval/evaluation-summary.md
 ```
 
-检查结构化汇总：
+复现报告必须同时列出案例数量、有效分母、运行环境和上述限制，而不是只展示百分比。
 
-Inspect the structured summary:
-
-```bash
-sed -n '1,260p' runs/eval/evaluation-summary.json
-```
-
-复现时应同时报告案例数量、有效分母和限制，而不是只报告百分比。
-
-When reproducing the evaluation, report the case count, eligible denominators, and limitations alongside percentages.
+A reproduction report must include case count, eligible denominators, environment, and the limitations above—not percentages alone.

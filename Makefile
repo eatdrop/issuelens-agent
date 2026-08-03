@@ -1,4 +1,4 @@
-.PHONY: demo patch-demo baseline eval test
+.PHONY: demo patch-demo shadow-demo shadow-demo-local dashboard baseline eval test
 
 demo:
 	PYTHONPATH=src python3 -m issuelens agent \
@@ -45,6 +45,44 @@ patch-demo:
 	PYTHONPATH=src python3 -m issuelens audit-report \
 		--audit-dir runs/patch-demo/audit \
 		--receipt-hash "$$receipt_hash"
+
+shadow-demo:
+	@$(MAKE) _shadow-demo SHADOW_RUNNER_ARGS=''
+
+shadow-demo-local:
+	@$(MAKE) _shadow-demo SHADOW_RUNNER_ARGS='--runner local --allow-unsafe-local'
+
+.PHONY: _shadow-demo
+_shadow-demo:
+	@set -eu; \
+	proposal_json="$$(PYTHONPATH=src python3 -m issuelens patch-proposal \
+		--repo fixtures/calculator_repo \
+		--diff evals/patches/division_by_zero.diff)"; \
+	printf '%s\n' "$$proposal_json"; \
+	proposal_hash="$$(printf '%s\n' "$$proposal_json" | \
+		python3 -c 'import json, sys; print(json.load(sys.stdin)["proposal_hash"])')"; \
+	printf '\n请审查补丁并粘贴完整 Proposal Hash。 / Review the patch and paste the full Proposal Hash.\n'; \
+	printf 'Proposal Hash: '; \
+	IFS= read -r approved_hash; \
+	if [ "$$approved_hash" != "$$proposal_hash" ]; then \
+		printf '%s\n' '审批已拒绝。 / Approval rejected.' >&2; \
+		exit 1; \
+	fi; \
+	printf '审批人 / Approver: '; \
+	IFS= read -r approved_by; \
+	PYTHONPATH=src python3 -m issuelens patch-validate \
+		--repo fixtures/calculator_repo \
+		--diff evals/patches/division_by_zero.diff \
+		--run-id shadow-demo \
+		--approved-by "$$approved_by" \
+		--approve-proposal-hash "$$approved_hash" \
+		--audit-dir runs/shadow-demo/audit \
+		--reproduction-tests evals/reproduction/division_by_zero \
+		--hidden-tests evals/hidden/division_by_zero \
+		$(SHADOW_RUNNER_ARGS)
+
+dashboard:
+	PYTHONPATH=src python3 -m issuelens serve --run-dir runs
 
 baseline:
 	PYTHONPATH=src python3 -m issuelens analyze \

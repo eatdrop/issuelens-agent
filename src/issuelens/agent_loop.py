@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from .checkpoint import AgentCheckpoint, CheckpointError, CheckpointStore, issue_digest
 from .domain import AnalysisReport, Evidence, PlanStep, TraceEvent
 from .issue_parser import parse_issue
 from .reporting import RunArtifacts
@@ -27,6 +28,37 @@ _TOOL_NAMES = {
 
 class AgentProtocolError(ValueError):
     """Raised when a policy requests an invalid or unsafe action."""
+
+
+class AgentBudgetExceeded(AgentProtocolError):
+    """Raised when an Agent crosses an explicit execution budget."""
+
+
+class _RetryableModelError(AgentProtocolError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class AgentBudget:
+    max_steps: int = 8
+    max_tool_calls: int = 8
+    max_evidence: int = 100
+    max_elapsed_seconds: float = 120.0
+
+    def __post_init__(self) -> None:
+        for name, value, minimum, maximum in (
+            ("max_steps", self.max_steps, 1, 100),
+            ("max_tool_calls", self.max_tool_calls, 1, 100),
+            ("max_evidence", self.max_evidence, 1, 1_000),
+        ):
+            if type(value) is not int or not minimum <= value <= maximum:
+                raise AgentProtocolError(f"{name} is outside the safe range")
+        if (
+            isinstance(self.max_elapsed_seconds, bool)
+            or not isinstance(self.max_elapsed_seconds, (int, float))
+            or not 1.0 <= float(self.max_elapsed_seconds) <= 3_600.0
+        ):
+            raise AgentProtocolError("max_elapsed_seconds is outside the safe range")
 
 
 @dataclass(frozen=True)
@@ -134,11 +166,23 @@ class OpenAICompatiblePolicy:
         model: str,
         api_key: str | None = None,
         timeout_seconds: float = 60.0,
+        max_retries: int = 2,
+        retry_backoff_seconds: float = 0.5,
     ) -> None:
         self.endpoint = endpoint
         self.model = model
         self.api_key = api_key or os.environ.get("ISSUELENS_API_KEY")
         self.timeout_seconds = timeout_seconds
+        if type(max_retries) is not int or not 0 <= max_retries <= 5:
+            raise AgentProtocolError("max_retries is outside the safe range")
+        if (
+            isinstance(retry_backoff_seconds, bool)
+            or not isinstance(retry_backoff_seconds, (int, float))
+            or not 0 <= float(retry_backoff_seconds) <= 10.0
+        ):
+            raise AgentProtocolError("retry_backoff_seconds is outside the safe range")
+        self.max_retries = max_retries
+        self.retry_backoff_seconds = float(retry_backoff_seconds)
 
     def next_action(self, view: SessionView) -> AgentAction:
         prompt = {
@@ -182,19 +226,42 @@ class OpenAICompatiblePolicy:
             headers=headers,
             method="POST",
         )
+        last_error: _RetryableModelError | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                return self._request_action(request)
+            except _RetryableModelError as exc:
+                last_error = exc
+                if attempt >= self.max_retries:
+                    break
+                time.sleep(self.retry_backoff_seconds * (2**attempt))
+        assert last_error is not None
+        raise AgentProtocolError(
+            f"model request failed after {self.max_retries + 1} attempt(s): "
+            f"{last_error}"
+        ) from last_error
+
+    def _request_action(self, request: urllib.request.Request) -> AgentAction:
         try:
             with urllib.request.urlopen(
                 request, timeout=self.timeout_seconds
             ) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+                response_body = response.read(_MAX_MODEL_RESPONSE_BYTES + 1)
+                if len(response_body) > _MAX_MODEL_RESPONSE_BYTES:
+                    raise _RetryableModelError("model response exceeds the size limit")
+                payload = json.loads(response_body.decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 or exc.code >= 500:
+                raise _RetryableModelError(f"HTTP {exc.code}") from exc
+            raise AgentProtocolError(f"model request was rejected: HTTP {exc.code}") from exc
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as exc:
-            raise AgentProtocolError(f"model request failed: {exc}") from exc
+            raise _RetryableModelError(str(exc)) from exc
         try:
             content = payload["choices"][0]["message"]["content"]
             action_payload = _parse_json_object(content)
-        except (KeyError, IndexError, TypeError) as exc:
-            raise AgentProtocolError("model response has an unsupported shape") from exc
-        return AgentAction.from_dict(action_payload)
+            return AgentAction.from_dict(action_payload)
+        except (KeyError, IndexError, TypeError, AgentProtocolError) as exc:
+            raise _RetryableModelError("model response has an invalid action shape") from exc
 
 
 class RepositoryToolbox:
@@ -294,28 +361,104 @@ class AgentLoopWorkflow:
         policy: AgentPolicy,
         run_id: str | None = None,
         max_steps: int = 8,
+        max_tool_calls: int = 8,
+        max_evidence: int = 100,
+        max_elapsed_seconds: float = 120.0,
+        resume: bool = False,
     ) -> AnalysisReport:
         started = time.perf_counter()
+        budget = AgentBudget(
+            max_steps=max_steps,
+            max_tool_calls=max_tool_calls,
+            max_evidence=max_evidence,
+            max_elapsed_seconds=max_elapsed_seconds,
+        )
+        if resume and not run_id:
+            raise CheckpointError("resume requires an explicit run_id")
         run_id = run_id or f"agent-{int(time.time())}-{uuid.uuid4().hex[:8]}"
-        artifacts = RunArtifacts(run_dir, run_id)
         repository = ReadOnlyRepository(repo_path)
+        artifact_root = Path(run_dir).expanduser().resolve()
+        if artifact_root == repository.root or repository.root in artifact_root.parents:
+            raise AgentProtocolError("run_dir must be outside the target repository")
+        artifacts = RunArtifacts(run_dir, run_id, resume=resume)
+        checkpoint_store = CheckpointStore(artifacts.path)
         issue = parse_issue(issue_text)
         snapshot_before = repository.snapshot_hash()
         toolbox = RepositoryToolbox(repository, repository.build_symbol_index())
-        observations: list[dict[str, Any]] = []
-        sequence = 0
+        current_issue_hash = issue_digest(issue_text)
+        prior_elapsed_seconds = 0.0
+        checkpoint_count = 0
+        start_step = 0
+
+        if resume:
+            checkpoint = checkpoint_store.load()
+            if checkpoint.completed:
+                raise CheckpointError("completed runs cannot be resumed")
+            if checkpoint.run_id != run_id:
+                raise CheckpointError("checkpoint run_id does not match")
+            if checkpoint.issue_hash != current_issue_hash:
+                raise CheckpointError("issue text changed since the checkpoint")
+            if checkpoint.repository_snapshot_hash != snapshot_before:
+                raise CheckpointError("repository changed since the checkpoint")
+            observations = [dict(item) for item in checkpoint.observations]
+            toolbox._store(list(checkpoint.evidence))
+            sequence = checkpoint.sequence + 1
+            start_step = checkpoint.next_step
+            prior_elapsed_seconds = float(checkpoint.elapsed_seconds)
+            artifacts.append_trace(
+                TraceEvent(
+                    sequence=sequence,
+                    state="agent_loop",
+                    event="run_resumed",
+                    details={
+                        "checkpoint_hash": checkpoint.checkpoint_hash,
+                        "next_step": start_step,
+                    },
+                )
+            )
+        else:
+            observations = []
+            sequence = 0
         submission: dict[str, Any] | None = None
 
-        for step in range(max_steps):
+        def elapsed_seconds() -> float:
+            return prior_elapsed_seconds + (time.perf_counter() - started)
+
+        def require_time_budget() -> None:
+            if elapsed_seconds() > budget.max_elapsed_seconds:
+                raise AgentBudgetExceeded("Agent elapsed-time budget was exhausted")
+
+        def save_checkpoint(*, next_step: int, completed: bool = False) -> None:
+            nonlocal checkpoint_count
+            checkpoint_store.save(
+                AgentCheckpoint.create(
+                    run_id=run_id,
+                    issue_hash=current_issue_hash,
+                    repository_snapshot_hash=snapshot_before,
+                    next_step=next_step,
+                    sequence=sequence,
+                    elapsed_seconds=elapsed_seconds(),
+                    observations=tuple(observations),
+                    evidence=tuple(toolbox.evidence.values()),
+                    completed=completed,
+                )
+            )
+            checkpoint_count += 1
+
+        save_checkpoint(next_step=start_step)
+
+        for step in range(start_step, budget.max_steps):
+            require_time_budget()
             view = SessionView(
                 issue_title=issue.title,
                 issue_body=issue.body,
                 step=step,
-                max_steps=max_steps,
+                max_steps=budget.max_steps,
                 observations=tuple(observations),
                 evidence=tuple(toolbox.evidence.values()),
             )
             action = policy.next_action(view)
+            require_time_budget()
             sequence += 1
             artifacts.append_trace(
                 TraceEvent(
@@ -338,7 +481,14 @@ class AgentLoopWorkflow:
                     {"step": step, "action": action.name, "ok": True}
                 )
                 break
+            tool_call_count = sum(
+                item.get("action") != "submit_analysis" for item in observations
+            )
+            if tool_call_count >= budget.max_tool_calls:
+                raise AgentBudgetExceeded("Agent tool-call budget was exhausted")
             result = toolbox.execute(action)
+            if len(toolbox.evidence) > budget.max_evidence:
+                raise AgentBudgetExceeded("Agent evidence budget was exhausted")
             observation = {"step": step, "action": action.name, **result}
             observations.append(observation)
             sequence += 1
@@ -350,6 +500,8 @@ class AgentLoopWorkflow:
                     details=observation,
                 )
             )
+            require_time_budget()
+            save_checkpoint(next_step=step + 1)
 
         if submission is None:
             raise AgentProtocolError("Agent exhausted its step budget without submitting")
@@ -391,11 +543,19 @@ class AgentLoopWorkflow:
                 "awaiting_human_review" if plan else "abstained",
             ],
             metrics={
-                "elapsed_ms": round((time.perf_counter() - started) * 1000, 2),
+                "elapsed_ms": round(elapsed_seconds() * 1000, 2),
                 "tool_call_count": len(
                     [item for item in observations if item["action"] != "submit_analysis"]
                 ),
                 "evidence_count": len(evidence),
+                "checkpoint_count": checkpoint_count + 1,
+                "resumed": resume,
+                "budget": {
+                    "max_elapsed_seconds": budget.max_elapsed_seconds,
+                    "max_evidence": budget.max_evidence,
+                    "max_steps": budget.max_steps,
+                    "max_tool_calls": budget.max_tool_calls,
+                },
                 "plan_evidence_coverage": (
                     round(
                         sum(bool(item.evidence_ids) for item in plan) / len(plan), 4
@@ -408,6 +568,7 @@ class AgentLoopWorkflow:
             },
         )
         artifacts.write_report(report)
+        save_checkpoint(next_step=budget.max_steps, completed=True)
         return report
 
 
@@ -632,3 +793,6 @@ All human-facing fields in submit_analysis must be bilingual, with Chinese first
 English second: diagnosis, every plan action and rationale, proposed_tests, risks, and
 acceptance_criteria. Use either "中文 / English" or separate Chinese and English paragraphs.
 """
+
+
+_MAX_MODEL_RESPONSE_BYTES = 1_000_000
