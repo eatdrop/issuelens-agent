@@ -1,0 +1,7 @@
+--- a/src/calculator.py
++++ b/src/calculator.py
+@@ -13,1 +13,3 @@
+-    return left / right
++    if right == 0:
++        raise ValueError("right must not be zero")
++    return left / right

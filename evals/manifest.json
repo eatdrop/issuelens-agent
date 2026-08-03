@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "id": "division-by-zero",
+      "repo": "../fixtures/calculator_repo",
+      "issue": "cases/division_by_zero.md",
+      "gold_files": [
+        "src/calculator.py"
+      ]
+    },
+    {
+      "id": "blank-due-date",
+      "repo": "../fixtures/task_tracker_repo",
+      "issue": "cases/blank_due_date.md",
+      "gold_files": [
+        "src/task_tracker/parser.py"
+      ],
+      "expected_status": "ready_for_human_review"
+    },
+    {
+      "id": "underspecified-export",
+      "repo": "../fixtures/calculator_repo",
+      "issue": "cases/underspecified_export.md",
+      "gold_files": [],
+      "expected_status": "insufficient_evidence"
+    }
+  ]
+}
