@@ -1,5 +1,7 @@
 # IssueLens：可追溯的 Python Coding Agent / An Evidence-Grounded Python Coding Agent
 
+[![持续集成 / CI](https://github.com/eatdrop/issuelens-agent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/eatdrop/issuelens-agent/actions/workflows/ci.yml) [![版本 / Release](https://img.shields.io/github/v/release/eatdrop/issuelens-agent?include_prereleases&sort=semver&label=release)](https://github.com/eatdrop/issuelens-agent/releases/tag/v0.1.0) [![Python / Python](https://img.shields.io/badge/python-3.11%20%7C%203.12-3776AB?logo=python&logoColor=white)](pyproject.toml) [![许可证 / License](https://img.shields.io/github/license/eatdrop/issuelens-agent)](LICENSE)
+
 IssueLens 是一个本地优先、证据可追溯、默认只读的 Python Coding Agent。
 
 IssueLens is a local-first, evidence-grounded, read-only-by-default Coding Agent for Python repositories.
